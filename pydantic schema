@@ -1,0 +1,35 @@
+from typing import List, Optional
+from pydantic import BaseModel, Field
+from datetime import datetime
+from app.model.enums import StepName, StepStatus, StepResult
+
+class StepModel(BaseModel):
+    step_name: StepName
+    result: StepResult
+    status: StepStatus
+    timestamp: str
+    message: Optional[str] = None
+
+class SharePointInfoModel(BaseModel):
+    relative_path: str
+    library_name: str
+    site_url: str
+
+class DocumentModel(BaseModel):
+    request_id: str
+    doc_run_id: str
+    run_id: str
+    tenant_id: str
+    engagement_id: str
+    year: int
+    quarter: str
+    sub_product_type: str
+    obligor_name: str
+    doc_id: str
+    original_filename: str
+    base64: str
+    file_type: str  # e.g., pdf, xlsx, docx
+    use_case_name: str
+    is_open_source_pipeline: bool
+    sharepoint_info: SharePointInfoModel
+    steps: List[StepModel]
