@@ -1,0 +1,34 @@
+import pandas as pd
+import re
+
+# Load the file
+df = pd.read_excel("feb13_ref_output_limited.xlsx")  # Replace with your file name
+
+# Get column names (assuming first 3)
+col_a, col_b, col_c = df.columns[:3]
+
+# Final processed rows
+processed_rows = []
+
+# Process each row
+for _, row in df.iterrows():
+    cell_value = str(row[col_c])
+
+    # Split based on blank lines (handles \n\n or \r\n\r\n)
+    blocks = re.split(r'\n\s*\n', cell_value.strip())
+
+    for block in blocks:
+        clean_block = block.strip()
+        if clean_block:
+            processed_rows.append({
+                col_a: row[col_a],
+                col_b: row[col_b],
+                col_c: clean_block
+            })
+
+# Create new DataFrame
+df_cleaned = pd.DataFrame(processed_rows)
+
+# Save the output
+df_cleaned.to_excel("cleaned_output_final.xlsx", index=False)
+print("✅ Done. Output saved to 'cleaned_output_final.xlsx'")
