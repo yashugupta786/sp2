@@ -1,0 +1,96 @@
+from pymongo.database import Database
+from typing import List, Dict, Any
+from app.model.enums import StepStatus
+from app.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
+
+class ViewDataService:
+    """
+    Service to process request logs and determine whether to return obligor metadata based on
+    processing status and document upload flags.
+    """
+
+    def __init__(self, db: Database):
+        self.run_logs = db["run_request_logs"]
+        self.run_mgmt = db["run_management"]
+
+    def get_view_data(self, tenant_id: str, engagement_id: str, year: int, quarter: str) -> Dict[str, Any]:
+        try:
+            logs = list(self.run_logs.find({
+                "tenant_id": tenant_id,
+                "engagement_id": engagement_id,
+                "year": year,
+                "quarter": quarter
+            }).sort("timestamp", -1))
+
+            if not logs:
+                logger.info("[VIEW-DATA] No request logs found.")
+                return {"status": "empty", "response_type": "no_requests_found", "data": []}
+
+            latest_log = logs[0]
+
+            if latest_log.get("document_upload") is True:
+                if self._is_vector_indexing_complete(latest_log):
+                    return self._fetch_obligor_data(engagement_id, year, quarter, fallback=False, request_id=latest_log.get("request_id"))
+                else:
+                    return {
+                        "status": "pending",
+                        "response_type": "steps_incomplete",
+                        "request_id": latest_log.get("request_id"),
+                        "steps": latest_log.get("steps", [])
+                    }
+
+            # If document_upload is False, look for fallback
+            for log in logs[1:]:
+                if log.get("document_upload") is True and self._is_vector_indexing_complete(log):
+                    return self._fetch_obligor_data(engagement_id, year, quarter, fallback=True, request_id=log.get("request_id"))
+
+            logger.warning("[VIEW-DATA] No fallback log with document_upload=True and vector_indexing=COMPLETED")
+            return {"status": "empty", "response_type": "no_valid_data_found", "data": []}
+
+        except Exception as e:
+            logger.exception(f"[VIEW-DATA ERROR] Failed to process view-data request: {str(e)}")
+            return {"status": "error", "message": str(e), "response_type": "exception"}
+
+    def _is_vector_indexing_complete(self, log: Dict[str, Any]) -> bool:
+        steps = log.get("steps", [])
+        for step in steps:
+            if step.get("step_name") == "vector_indexing":
+                return step.get("status") == StepStatus.COMPLETED
+        return False
+
+    def _fetch_obligor_data(self, engagement_id: str, year: int, quarter: str, fallback: bool, request_id: str) -> Dict[str, Any]:
+        try:
+            run_doc = self.run_mgmt.find_one({"engagement_id": engagement_id})
+            if not run_doc or "metadata" not in run_doc:
+                return {
+                    "status": "empty",
+                    "response_type": "no_metadata",
+                    "data": [],
+                    "fallback": fallback,
+                    "request_id": request_id
+                }
+
+            results = []
+            for meta in run_doc.get("metadata", []):
+                if meta.get("year") == year and meta.get("quarter") == quarter:
+                    for industry in meta.get("industries", []):
+                        sub_product_type = industry.get("sub_product_type")
+                        for obligor in industry.get("obligors", []):
+                            results.append({
+                                "sub_product_type": sub_product_type,
+                                "obligor_name": obligor.get("obligor_name"),
+                                "doc_run_id": obligor.get("doc_run_id")
+                            })
+
+            return {
+                "status": "success",
+                "response_type": "data_available",
+                "fallback": fallback,
+                "request_id": request_id,
+                "data": results
+            }
+        except Exception as e:
+            logger.exception(f"[VIEW-DATA ERROR] Failed to fetch obligor data: {str(e)}")
+            return {"status": "error", "message": str(e), "response_type": "metadata_failure"}
