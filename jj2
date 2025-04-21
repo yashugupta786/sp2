@@ -1,0 +1,50 @@
+from fastapi import APIRouter, Depends, Request
+from pymongo.database import Database
+from app.db.mongo_client import get_mongo_db
+from app.utils.logger import setup_logger
+from app.services.run_status_service import RunStatusService
+
+router = APIRouter()
+logger = setup_logger(__name__)
+
+@router.post("/status-summary")
+async def status_summary(request: Request, db: Database = Depends(get_mongo_db)):
+    """
+    POST endpoint to fetch status summary for a given tenant and engagement.
+
+    This endpoint queries `run_management` to find all year-quarter metadata for the given
+    tenant and engagement. For each year-quarter combination, it retrieves the latest log entry
+    from `run_request_logs` and returns the step status summary.
+
+    Expects a JSON body with keys: tenant_id, engagement_id.
+    Returns a structured JSON response with year, quarter, and steps for each combination.
+    """
+    try:
+        body = await request.json()
+        tenant_id = body.get("tenant_id")
+        engagement_id = body.get("engagement_id")
+
+        if not tenant_id or not engagement_id:
+            logger.warning("[API] Missing tenant_id or engagement_id in request body")
+            return {
+                "status": "error",
+                "message": "Missing tenant_id or engagement_id"
+            }
+
+        logger.info(f"[API] Status summary requested for tenant_id={tenant_id}, engagement_id={engagement_id}")
+
+        service = RunStatusService(db)
+        summary = service.get_status_summary(tenant_id, engagement_id)
+
+        return {
+            "status": "success",
+            "data": summary
+        }
+
+    except Exception as e:
+        logger.exception(f"[API ERROR] Failed to retrieve status summary: {str(e)}")
+        return {
+            "status": "error",
+            "message": "Failed to fetch status summary.",
+            "details": str(e)
+        }
