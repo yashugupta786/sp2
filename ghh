@@ -1,0 +1,27 @@
+@staticmethod
+def add_blob_upload_step_for_large_file(
+    doc_col: Collection,
+    doc_id: str,
+):
+    """
+    Appends BLOB_UPLOAD step as COMPLETED for large files that were uploaded during ingestion.
+    """
+    try:
+        doc_col.update_one(
+            filter={"doc_id": doc_id},
+            update={
+                "$push": {
+                    "steps": {
+                        "step_name": StepName.BLOB_UPLOAD,
+                        "result": StepResult.SUCCESS,
+                        "status": StepStatus.COMPLETED,
+                        "message": "Large file uploaded during ingestion",
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                }
+            }
+        )
+        logger.info(f"[STEP] Added BLOB_UPLOAD step for large file: doc_id={doc_id}")
+    except Exception as e:
+        logger.exception(f"[STEP ERROR] Failed to add step for large file: doc_id={doc_id} | Error: {str(e)}")
+        raise
