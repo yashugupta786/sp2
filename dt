@@ -1,0 +1,27 @@
+import pandas as pd
+import re
+
+def extract_tag_name(text):
+    """
+    Extracts the tag name from a given text.
+    Expected pattern: 'Tag name: XYZ'
+    Returns XYZ or None if not found.
+    """
+    if pd.isna(text):
+        return None
+    match = re.search(r'Tag name:\s*(.+)', text, re.IGNORECASE)
+    if match:
+        return match.group(1).strip()
+    return None
+
+# Load the Excel file (replace with your file path)
+file_path = 'your_file.xlsx'
+df = pd.read_excel(file_path)
+
+# Extract tag name
+df['tag_name_new'] = df['refine_output'].apply(extract_tag_name)
+
+# Save the result (optional)
+df.to_excel('output_with_tags.xlsx', index=False)
+
+print("Tag name extraction completed. Output saved to 'output_with_tags.xlsx'.")
