@@ -1,0 +1,70 @@
+from pymongo.database import Database
+from typing import List, Dict, Any
+from app.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
+
+class ViewDataService:
+    """
+    Service to fetch obligor metadata (obligor_name, sub_product_type, doc_run_id)
+    from run_management based on engagement_id, year, and quarter.
+
+    This service does not check for document upload or processing status.
+    It assumes data in run_management is ready to display.
+    """
+
+    def __init__(self, db: Database):
+        self.run_mgmt = db["run_management"]
+
+    def get_view_data(self, engagement_id: str, year: int, quarter: str) -> Dict[str, Any]:
+        """
+        Retrieves obligor metadata from run_management based on engagement_id, year, and quarter.
+
+        Args:
+            engagement_id (str): Unique identifier for the engagement.
+            year (int): Year of interest.
+            quarter (str): Quarter of interest (e.g., 'Q1', 'Q2').
+
+        Returns:
+            Dict[str, Any]: JSON-compatible dictionary with status and obligor metadata.
+        """
+        try:
+            run_doc = self.run_mgmt.find_one({"engagement_id": engagement_id})
+            if not run_doc or "metadata" not in run_doc:
+                logger.info(f"[VIEW-DATA] No run_management metadata found for engagement: {engagement_id}")
+                return {
+                    "status": "no_data",
+                    "year": year,
+                    "quarter": quarter,
+                    "obligors": []
+                }
+
+            result = []
+            for meta in run_doc.get("metadata", []):
+                if meta.get("year") == year and meta.get("quarter") == quarter:
+                    for industry in meta.get("industries", []):
+                        sub_product_type = industry.get("sub_product_type")
+                        for obligor in industry.get("obligors", []):
+                            result.append({
+                                "obligor_name": obligor.get("obligor_name"),
+                                "sub_product_type": sub_product_type,
+                                "doc_run_id": obligor.get("doc_run_id")
+                            })
+
+            logger.info(f"[VIEW-DATA] Found {len(result)} obligors for engagement: {engagement_id}, year: {year}, quarter: {quarter}")
+            return {
+                "status": "success",
+                "year": year,
+                "quarter": quarter,
+                "obligors": result
+            }
+
+        except Exception as e:
+            logger.exception(f"[VIEW-DATA ERROR] Failed to fetch obligor data for engagement: {engagement_id} | Error: {str(e)}")
+            return {
+                "status": "error",
+                "message": str(e),
+                "year": year,
+                "quarter": quarter,
+                "obligors": []
+            }
