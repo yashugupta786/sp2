@@ -1,0 +1,202 @@
+import logging
+from typing import Dict, Any, List
+from pymongo.collection import Collection
+from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+
+logger = logging.getLogger(__name__)
+
+
+class TextExtractionService:
+    """
+    Executes text extraction in parallel across all documents tied to a request_id.
+    Includes strict validation, result logging, and step updates in MongoDB.
+    """
+
+    def __init__(
+        self,
+        run_documents_collection: Collection,
+        request_logs_collection: Collection,
+        max_workers: int = 10
+    ):
+        """
+        Initialize the service.
+
+        :param run_documents_collection: MongoDB collection for run_documents
+        :param request_logs_collection: MongoDB collection for run_request_logs
+        :param max_workers: Max threads for parallelism
+        """
+        self.run_documents_collection = run_documents_collection
+        self.request_logs_collection = request_logs_collection
+        self.max_workers = max_workers
+
+    def run_for_request_id(self, request_id: str):
+        """
+        Start text extraction for all documents under a given request_id.
+
+        :param request_id: Unique request identifier
+        """
+        logger.info(f"[TextExtraction] Starting for request_id={request_id}")
+        try:
+            documents = list(self.run_documents_collection.find({"request_id": request_id}))
+            if not documents:
+                logger.warning(f"[TextExtraction] No documents found for request_id={request_id}")
+                self._update_overall_status(request_id, "SKIPPED", "No documents found")
+                return
+
+            skipped, processed, failed = 0, 0, 0
+            futures = []
+
+            with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+                for doc in documents:
+                    try:
+                        payload = self._prepare_payload(doc)
+                        futures.append(executor.submit(self._process_single_document, doc["_id"], payload))
+                    except ValueError as ve:
+                        skipped += 1
+                        logger.warning(f"[TextExtraction] Skipped doc_id={doc.get('doc_id')}: {ve}")
+                        self._update_doc_step(doc["_id"], "SKIPPED", str(ve), payload=None)
+
+                for future in as_completed(futures):
+                    try:
+                        result = future.result()
+                        if result == "FAILED":
+                            failed += 1
+                        else:
+                            processed += 1
+                    except Exception as e:
+                        failed += 1
+                        logger.error(f"[TextExtraction] Threaded failure: {str(e)}")
+
+            msg = f"Completed text extraction: Processed={processed}, Skipped={skipped}, Failed={failed}"
+            logger.info(f"[TextExtraction] {msg}")
+            overall_status = "COMPLETED" if processed > 0 else "FAILED"
+            self._update_overall_status(request_id, overall_status, msg)
+
+        except Exception as e:
+            logger.exception(f"[TextExtraction] Fatal error during execution for request_id={request_id}")
+            self._update_overall_status(request_id, "FAILED", str(e))
+
+    def _prepare_payload(self, doc: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Validate and construct payload for the extraction API.
+
+        :param doc: Raw MongoDB doc
+        :return: Structured payload
+        :raises ValueError: If required fields are missing
+        """
+        required_fields = ["doc_run_id", "doc_id", "sas_url"]
+        meta_fields = ["tenant_id", "engagement_id", "sub_product_type", "obligor_name", "year", "quarter"]
+
+        for field in required_fields:
+            if not doc.get(field):
+                raise ValueError(f"Missing required field: {field}")
+
+        for field in meta_fields:
+            if not doc.get(field):
+                raise ValueError(f"Missing meta field: {field}")
+
+        return {
+            "doc_run_id": doc["doc_run_id"],
+            "doc_id": doc["doc_id"],
+            "sas_url": doc["sas_url"],
+            "use_case_name": doc.get("use_case_name", "Loan file review"),
+            "is_open_source_pipeline": doc.get("is_open_source_pipeline", False),
+            "doc_file_type": doc.get("doc_file_type", "pdf"),
+            "meta": {
+                "tenant_id": doc["tenant_id"],
+                "engagement_id": doc["engagement_id"],
+                "sub_product_type": doc["sub_product_type"],
+                "obligor_name": doc["obligor_name"],
+                "year": doc["year"],
+                "quarter": doc["quarter"],
+                "is_tape_file": doc.get("is_tape_file", False)
+            }
+        }
+
+    def _process_single_document(self, mongo_id, payload: Dict[str, Any]) -> str:
+        """
+        Trigger extraction API and log result in Mongo.
+
+        :param mongo_id: Document _id in Mongo
+        :param payload: Validated payload for extraction
+        :return: "SUCCESS" or "FAILED"
+        """
+        try:
+            logger.info(f"[TextExtraction] Calling API for doc_id={payload['doc_id']}")
+            response = self._call_dummy_text_extraction_api(payload)
+
+            status = response.get("status", "unknown").upper()
+            message = response.get("message", "No message")
+            self._update_doc_step(mongo_id, status, message, payload=response)
+
+            return "SUCCESS" if status == "SUCCESS" else "FAILED"
+
+        except Exception as e:
+            logger.error(f"[TextExtraction] Failed for doc_id={payload.get('doc_id')}: {str(e)}")
+            self._update_doc_step(mongo_id, "FAILED", str(e), payload=None)
+            return "FAILED"
+
+    def _update_doc_step(self, mongo_id, status: str, message: str, payload: Dict[str, Any] = None):
+        """
+        Log step result per document.
+
+        :param mongo_id: Mongo _id
+        :param status: Status ("SUCCESS", "FAILED", "SKIPPED")
+        :param message: Result message
+        :param payload: Response payload (optional)
+        """
+        try:
+            update_obj = {
+                "steps.TEXT_EXTRACTION.status": status,
+                "steps.TEXT_EXTRACTION.timestamp": datetime.utcnow().isoformat(),
+                "steps.TEXT_EXTRACTION.message": message
+            }
+            if payload:
+                update_obj["steps.TEXT_EXTRACTION.response_payload"] = payload
+
+            result = self.run_documents_collection.update_one(
+                {"_id": mongo_id}, {"$set": update_obj}
+            )
+
+            if result.modified_count == 0:
+                logger.warning(f"[TextExtraction] No doc updated for _id={mongo_id}")
+
+        except Exception as e:
+            logger.error(f"[TextExtraction] Mongo update failed for _id={mongo_id}: {str(e)}")
+
+    def _update_overall_status(self, request_id: str, status: str, message: str):
+        """
+        Update TEXT_EXTRACTION step in request logs.
+
+        :param request_id: Request ID
+        :param status: Status string
+        :param message: Status message
+        """
+        try:
+            result = self.request_logs_collection.update_one(
+                {"request_id": request_id, "steps.step_name": "TEXT_EXTRACTION"},
+                {"$set": {
+                    "steps.$.status": status,
+                    "steps.$.timestamp": datetime.utcnow().isoformat(),
+                    "steps.$.message": message
+                }}
+            )
+            if result.modified_count == 0:
+                logger.warning(f"[TextExtraction] Request log not updated for request_id={request_id}")
+        except Exception as e:
+            logger.error(f"[TextExtraction] Request log update failed for request_id={request_id}: {str(e)}")
+
+    def _call_dummy_text_extraction_api(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Simulates text extraction. Replace with requests.post() call.
+
+        :param payload: Validated payload
+        :return: Simulated response
+        """
+        return {
+            "doc_run_id": payload["doc_run_id"],
+            "doc_id": payload["doc_id"],
+            "status": "SUCCESS",
+            "message": "Text extracted successfully"
+        }
