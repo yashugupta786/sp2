@@ -1,0 +1,225 @@
+# -----------------------------
+# 📁 app/models/enums.py
+# -----------------------------
+from enum import Enum
+
+class ExtractionStatus(str, Enum):
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    PARTIAL = "PARTIAL"
+
+
+# -----------------------------
+# 📁 app/models/payload.py
+# -----------------------------
+from pydantic import BaseModel, Field
+from typing import Optional
+
+class AttributeExtractionTriggerRequest(BaseModel):
+    engagement_id: str = Field(..., example="ENG2024")
+    year: str = Field(..., example="2024")
+    quarter: str = Field(..., example="Q1")
+
+class AttributeExtractionTriggerResponse(BaseModel):
+    status: str
+    request_id: Optional[str] = None
+    error: Optional[str] = None
+
+
+# -----------------------------
+# 📁 app/services/attribute_extraction_service.py
+# -----------------------------
+import uuid
+from datetime import datetime
+from typing import Dict, List, Any
+from fastapi import BackgroundTasks
+from pymongo import MongoClient
+import requests
+from app.models.enums import ExtractionStatus
+from app.utils.logger import logger
+from app.config.settings import settings
+
+class AttributeExtractionService:
+    """
+    Service class for orchestrating AI-based attribute extraction.
+    Extracts doc_run_ids from run_management and triggers external API.
+    Stores step-wise status in MongoDB.
+    """
+
+    def __init__(self, mongo_client: MongoClient):
+        self.db = mongo_client["your_db"]
+        self.run_mgmt = self.db["run_management"]
+        self.extraction_reqs = self.db["attribute_extraction_requests"]
+        self.extraction_runs = self.db["attribute_extraction_runs"]
+
+    def trigger_extraction(self, request_data: Dict[str, Any], background_tasks: BackgroundTasks) -> Dict[str, Any]:
+        """
+        Main trigger method for loan_review_routes.
+        Validates inputs, creates request_id, logs initial state, and dispatches background task.
+        """
+        request_id = f"ATTR_REQ_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        now = datetime.utcnow()
+
+        engagement_id = request_data.get("engagement_id")
+        year = request_data.get("year")
+        quarter = request_data.get("quarter")
+
+        if not all([engagement_id, year, quarter]):
+            logger.error("Missing required input fields in attribute extraction trigger.")
+            return {"status": "failed", "error": "Missing required fields."}
+
+        try:
+            run_doc = self.run_mgmt.find_one({"engagement_id": engagement_id})
+            if not run_doc:
+                logger.warning(f"No run_management doc found for engagement_id={engagement_id}")
+                return {"status": "no_documents", "request_id": None}
+
+            doc_run_id_map = {}
+            for entry in run_doc.get("metadata", []):
+                if entry.get("year") == year and entry.get("quarter") == quarter:
+                    for sub in entry.get("sub_product_types", []):
+                        subproduct = sub.get("sub_product_type")
+                        for obligor in sub.get("obligors", []):
+                            doc_run_id = obligor.get("doc_run_id")
+                            if doc_run_id:
+                                doc_run_id_map[doc_run_id] = {
+                                    "obligor_name": obligor.get("obligor_name"),
+                                    "subproduct": subproduct,
+                                    "meta": {
+                                        "engagement_id": engagement_id,
+                                        "year": year,
+                                        "quarter": quarter,
+                                        "obligor_name": obligor.get("obligor_name"),
+                                        "sub_product_type": subproduct
+                                    }
+                                }
+
+            if not doc_run_id_map:
+                logger.warning(f"No doc_run_ids found for engagement={engagement_id}, year={year}, quarter={quarter}")
+                return {"status": "no_documents", "request_id": None}
+
+            self.extraction_reqs.insert_one({
+                "request_id": request_id,
+                "engagement_id": engagement_id,
+                "year": year,
+                "quarter": quarter,
+                "status": ExtractionStatus.IN_PROGRESS.value,
+                "created_at": now,
+                "doc_run_ids": list(doc_run_id_map.keys()),
+                "step_progress": {k: ExtractionStatus.PENDING.value for k in doc_run_id_map},
+                "completed_count": 0,
+                "total_count": len(doc_run_id_map),
+                "last_updated": now
+            })
+
+            background_tasks.add_task(self._run_background_extraction, request_id, doc_run_id_map)
+            logger.info(f"Attribute extraction triggered for request_id={request_id}")
+            return {"status": "triggered", "request_id": request_id}
+
+        except Exception as ex:
+            logger.exception("Error while triggering attribute extraction")
+            return {"status": "failed", "error": str(ex)}
+
+    def _run_background_extraction(self, request_id: str, doc_run_id_map: Dict[str, Any]):
+        """
+        Worker thread to iterate doc_run_ids, hit attribute extraction API, and log results.
+        """
+        for doc_run_id, info in doc_run_id_map.items():
+            extraction_run_id = f"EXR_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+            try:
+                payload = {
+                    "extraction_run_id": extraction_run_id,
+                    "doc_run_id": doc_run_id,
+                    "use_case_name": "Loan File Review",
+                    "is_open_source_pipeline": False,
+                    "meta": info["meta"],
+                    "product": None,
+                    "subproduct": info["subproduct"],
+                    "asset_class": None,
+                    "data_element": None,
+                    "is_latest": True,
+                    "version_tags": None
+                }
+
+                self.extraction_runs.insert_one({
+                    "request_id": request_id,
+                    "doc_run_id": doc_run_id,
+                    "extraction_run_id": extraction_run_id,
+                    "subproduct": info.get("subproduct"),
+                    "obligor_name": info.get("obligor_name"),
+                    "run_status": ExtractionStatus.PENDING.value,
+                    "run_start_dtm": datetime.utcnow(),
+                    "run_end_dtm": None,
+                    "run_results": {}
+                })
+
+                logger.info(f"Calling extraction API for doc_run_id={doc_run_id}")
+                response = requests.post(settings.ATTRIBUTE_EXTRACTION_API_URL, json=payload, timeout=90)
+                response.raise_for_status()
+                result = response.json()
+
+                self.extraction_runs.update_one(
+                    {"request_id": request_id, "doc_run_id": doc_run_id},
+                    {"$set": {
+                        "run_status": ExtractionStatus.COMPLETED.value,
+                        "run_end_dtm": datetime.utcnow(),
+                        "run_results": result
+                    }}
+                )
+                logger.info(f"Extraction complete for doc_run_id={doc_run_id}")
+                self._update_step_progress(request_id, doc_run_id, ExtractionStatus.COMPLETED)
+
+            except Exception as ex:
+                logger.exception(f"Extraction failed for doc_run_id={doc_run_id}")
+                self.extraction_runs.update_one(
+                    {"request_id": request_id, "doc_run_id": doc_run_id},
+                    {"$set": {
+                        "run_status": ExtractionStatus.FAILED.value,
+                        "run_end_dtm": datetime.utcnow(),
+                        "error_message": str(ex)
+                    }}
+                )
+                self._update_step_progress(request_id, doc_run_id, ExtractionStatus.FAILED)
+
+        self._finalize_request_status(request_id)
+
+    def _update_step_progress(self, request_id: str, doc_run_id: str, status: ExtractionStatus):
+        """
+        Updates per-document step status in attribute_extraction_requests.
+        """
+        update_fields = {
+            f"step_progress.{doc_run_id}": status.value,
+            "last_updated": datetime.utcnow()
+        }
+        if status == ExtractionStatus.COMPLETED:
+            self.extraction_reqs.update_one(
+                {"request_id": request_id},
+                {"$set": update_fields, "$inc": {"completed_count": 1}}
+            )
+        else:
+            self.extraction_reqs.update_one(
+                {"request_id": request_id},
+                {"$set": update_fields}
+            )
+
+    def _finalize_request_status(self, request_id: str):
+        """
+        After all docs processed, determine final status (COMPLETE/PARTIAL/FAILED).
+        """
+        doc = self.extraction_reqs.find_one({"request_id": request_id})
+        total = doc.get("total_count", 0)
+        completed = doc.get("completed_count", 0)
+
+        if completed == total:
+            final_status = ExtractionStatus.COMPLETED.value
+        elif completed == 0:
+            final_status = ExtractionStatus.FAILED.value
+        else:
+            final_status = ExtractionStatus.PARTIAL.value
+
+        self.extraction_reqs.update_one(
+            {"request_id": request_id},
+            {"$set": {"status": final_status, "last_updated": datetime.utcnow()}}
+        )
