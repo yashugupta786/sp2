@@ -1,0 +1,68 @@
+# syntax=docker/dockerfile:1
+
+### --------- STAGE 1: Builder ---------
+FROM python:3.12.3-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y build-essential git gcc libpq-dev npm
+
+
+# Copy base requirements
+COPY pyproject.toml uv.lock README.md ./
+COPY src/backend/base/pyproject.toml src/backend/base/uv.lock src/backend/base/README.md ./src/backend/base/
+
+# Install Python dependencies with uv
+RUN pip install --upgrade pip && pip install uv
+RUN uv sync --frozen --no-editable --extra deploy --extra postgresql
+
+# Copy the whole source code
+COPY src /app/src
+COPY custom_components /app/custom_components
+
+# Build the frontend and move to backend
+WORKDIR /app/src/frontend
+RUN npm ci
+ENV NODE_OPTIONS=--max-old-space-size=4096
+RUN npm run build && mkdir -p /app/src/backend/base/langflow/frontend && cp -r build/* /app/src/backend/base/langflow/frontend/
+
+
+
+# Install langflow-base in editable mode
+RUN pip install -e /app/src/backend/base
+
+# ✅ Important: Install the main langflow package (adds CLI like `langflow run`)
+WORKDIR /app
+RUN uv pip install -e /app
+
+
+### --------- STAGE 2: Runtime Image ---------
+FROM python:3.12.3-slim
+
+WORKDIR /app
+
+# Install runtime dependencies (Node.js is not strictly needed in runtime but left in case you want to serve static frontend yourself)
+RUN apt-get update && apt-get install -y \
+    curl \
+    git \
+    libpq5 \
+    gnupg && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Copy built app from builder stage
+COPY --from=builder /app /app
+
+
+# Set environment variables
+ENV PATH="/app/.venv/bin:$PATH"
+ENV LANGFLOW_HOST=0.0.0.0
+ENV LANGFLOW_PORT=7860
+ENV LANGFLOW_COMPONENTS_PATH=/app/custom_components
+
+EXPOSE 7860
+
+# Run Langflow app
+CMD ["python", "-m", "langflow", "run", "--host", "0.0.0.0", "--port", "7860"]
