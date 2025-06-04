@@ -1,0 +1,88 @@
+version: "3.8"
+
+services:
+  langflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    image: langflow-all-in-one:latest
+    environment:
+      LANGFLOW_DATABASE_URL: postgresql://langflow:langflow@db:5432/langflow
+      LANGFLOW_SUPERUSER: admin
+      LANGFLOW_SUPERUSER_PASSWORD: adminpassword
+      LANGFLOW_AUTO_LOGIN: "false"
+      LANGFLOW_WORKERS: 1
+      LANGFLOW_EVENT_DELIVERY: direct
+      LANGFLOW_REDIS_HOST: redis
+      LANGFLOW_REDIS_PORT: 6379
+      LANGFLOW_CACHE_TYPE: redis
+      LANGFLOW_COMPONENTS_PATH: /app/custom_components
+      LANGFLOW_SECRET_KEY: "1234567890123"
+    ports:
+      - "7860:7860"
+    depends_on:
+      - db
+      - redis
+      - rabbitmq
+    volumes:
+      - ./custom_components:/app/custom_components
+
+  celeryworker:
+    image: langflow-all-in-one:latest
+    depends_on:
+      - langflow
+      - db
+      - rabbitmq
+      - redis
+    environment:
+      C_FORCE_ROOT: 1
+      LANGFLOW_DATABASE_URL: postgresql://langflow:langflow@db:5432/langflow
+      LANGFLOW_SUPERUSER: admin
+      LANGFLOW_SUPERUSER_PASSWORD: adminpassword
+      LANGFLOW_AUTO_LOGIN: "false"
+      LANGFLOW_WORKERS: 2
+      LANGFLOW_EVENT_DELIVERY: direct
+      LANGFLOW_REDIS_HOST: redis
+      LANGFLOW_REDIS_PORT: 6379
+      LANGFLOW_CACHE_TYPE: redis
+      LANGFLOW_COMPONENTS_PATH: /app/custom_components
+      LANGFLOW_SECRET_KEY: "1234567890123"
+    command: >
+      python -m celery -A langflow.worker.celery_app worker --loglevel=INFO --concurrency=1 -n lf-worker@%h -P eventlet
+    volumes:
+      - ./custom_components:/app/custom_components
+    deploy:
+      replicas: 2
+
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: langflow
+      POSTGRES_PASSWORD: langflow
+      POSTGRES_DB: langflow
+    volumes:
+      - langflow-postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  redis:
+    image: redis:6.2.5
+    ports:
+      - "6379:6379"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    environment:
+      RABBITMQ_DEFAULT_USER: langflow
+      RABBITMQ_DEFAULT_PASS: langflow
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+      - rabbitmq_log:/var/log/rabbitmq
+
+volumes:
+  langflow-postgres:
+  rabbitmq_data:
+  rabbitmq_log:
