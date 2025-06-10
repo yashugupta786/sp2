@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Langflow SSO Auto-Login Initiator</title>
+  <style>
+    /* Basic styling for a clean, modern look */
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh; /* Ensures it takes full viewport height */
+      margin: 0;
+      background-color: #e9ebee; /* Light grey background */
+      color: #333; /* Dark grey text */
+      line-height: 1.6;
+    }
+    .container {
+      background: white;
+      padding: 40px 30px;
+      border-radius: 12px;
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1); /* Soft shadow */
+      display: flex;
+      flex-direction: column;
+      gap: 25px; /* Space between elements */
+      max-width: 450px;
+      width: 90%; /* Responsive width */
+      box-sizing: border-box; /* Include padding in element's total width/height */
+      text-align: center;
+    }
+    h2 {
+      color: #007bff; /* Blue heading */
+      margin-bottom: 20px;
+      font-size: 1.8em;
+    }
+    p {
+      color: #555;
+      font-size: 0.95em;
+    }
+    form {
+      display: flex;
+      flex-direction: column;
+      gap: 15px;
+    }
+    input[type="email"],
+    input[type="text"] {
+      padding: 12px 15px;
+      border: 1px solid #ddd;
+      border-radius: 6px;
+      font-size: 1rem;
+      transition: border-color 0.3s; /* Smooth transition on focus */
+    }
+    input[type="email"]:focus,
+    input[type="text"]:focus {
+      border-color: #007bff; /* Blue border on focus */
+      outline: none; /* Remove default outline */
+      box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25); /* Subtle glow on focus */
+    }
+    button {
+      padding: 12px 25px;
+      background-color: #28a745; /* Green button */
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1.1rem;
+      font-weight: bold;
+      transition: background-color 0.3s ease, transform 0.1s ease; /* Smooth hover effects */
+    }
+    button:hover {
+      background-color: #218838;
+      transform: translateY(-1px); /* Slight lift on hover */
+    }
+    button:active {
+      transform: translateY(0); /* Press effect */
+    }
+    #status {
+      margin-top: 25px;
+      font-weight: bold;
+      color: #007bff; /* Blue for status messages */
+      font-size: 1.05em;
+    }
+    .note {
+        font-size: 0.85em;
+        color: #777; /* Grey text for notes */
+        margin-top: 15px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Langflow SSO Login</h2>
+    <p>Enter your credentials to automatically log into Langflow.</p>
+    <form id="ssoForm">
+      <input id="email" type="email" placeholder="User Email" required autocomplete="email" />
+      <input id="token" type="text" placeholder="SSO Token (for development)" required />
+      <button type="submit">Log in to Langflow</button>
+    </form>
+    <div id="status"></div>
+    <p class="note">
+        Note: This page initiates the SSO process. You will be redirected to the Langflow application automatically.
+    </p>
+  </div>
+
+  <script>
+    const form = document.getElementById('ssoForm');
+    const statusDiv = document.getElementById('status');
+    
+    // !!! IMPORTANT: REPLACE THIS WITH YOUR ACTUAL LANGFLOW DOMAIN !!!
+    // This MUST match the domain you access Langflow at,
+    // e.g., "geniaiapps.exlservice.com"
+    const LANGFLOW_DOMAIN = "geniaiapps.exlservice.com"; 
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault(); // Prevent default form submission
+
+      statusDiv.textContent = "Initiating secure login...";
+      statusDiv.style.color = '#007bff'; // Set status text color to blue
+
+      const email = document.getElementById('email').value.trim();
+      const token = document.getElementById('token').value.trim();
+
+      if (!email || !token) {
+        statusDiv.textContent = "Please provide both email and token.";
+        statusDiv.style.color = '#dc3545'; // Red color for error
+        return;
+      }
+
+      // Construct the URL for your Langflow backend's custom SSO endpoint.
+      // This URL will be directly navigated to by the browser.
+      const ssoInitiationUrl = `https://${LANGFLOW_DOMAIN}/api/v1/sso_login?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+
+      // Perform the direct navigation. This is the key to seamless auto-login.
+      // The browser will make the request to your Langflow backend,
+      // which will set the cookies and then redirect to the main Langflow UI.
+      window.location.href = ssoInitiationUrl;
+
+      // The code below this line will generally not execute in a successful flow
+      // because the page is immediately redirected. The user's successful login
+      // will be apparent when they land on the Langflow UI already authenticated.
+      statusDiv.textContent = "Redirecting to Langflow...";
+    });
+  </script>
+</body>
+</html>
