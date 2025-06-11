@@ -22,18 +22,22 @@
       <button type="submit">Log in to Langflow</button>
     </form>
     <div id="status"></div>
-    <p style="font-size:0.92em;color:#888;">You will be redirected to Langflow automatically.</p>
+    <p style="font-size:0.92em;color:#888;">You will be redirected to Langflow automatically after successful SSO login.</p>
   </div>
   <script>
     const form = document.getElementById('ssoForm');
     const statusDiv = document.getElementById('status');
-    const LANGFLOW_DOMAIN = "geniaiapps.exlservice.com"; // Set your real domain!
+    // --- Update this to your deployed Langflow domain ---
+    const LANGFLOW_DOMAIN = "geniaiapps.exlservice.com";
     const SSO_PATH = "/api/v1/sso_login";
     const LOGIN_PATH = "/api/v1/login";
+    const SSO_DEFAULT_PASSWORD = "sso_user_secret"; // Must match backend!
 
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
+      statusDiv.style.color = '#007bff';
       statusDiv.textContent = "Initiating SSO login...";
+
       const email = document.getElementById('email').value.trim();
       const token = document.getElementById('token').value.trim();
       if (!email || !token) {
@@ -42,29 +46,24 @@
         return;
       }
       try {
-        // 1. SSO: Register/Create user and set cookies
+        // 1. Call /sso_login to create user and set cookies (if user doesn't exist)
         const ssoUrl = `https://${LANGFLOW_DOMAIN}${SSO_PATH}?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
         const ssoResp = await fetch(ssoUrl, {
           method: "GET",
           credentials: "include"
         });
-        if (!ssoResp.ok && ssoResp.status !== 307 && ssoResp.status !== 302) {
+        // Accept 307, 302, 200 as "ok"
+        if (!(ssoResp.ok || ssoResp.status === 307 || ssoResp.status === 302)) {
           statusDiv.textContent = "SSO setup failed. Try again.";
           statusDiv.style.color = '#dc3545';
           return;
         }
-        statusDiv.textContent = "SSO Success. Logging in...";
+        statusDiv.textContent = "SSO setup done. Logging in...";
 
         // 2. POST to /login with OAuth2 form fields
         const params = new URLSearchParams();
         params.append('username', email);
-        params.append('password', ''); // blank, since you create user with blank password
-
-        // If your backend requires grant_type/client_id/scope (OAuth2), add as blank:
-        // params.append('grant_type', '');
-        // params.append('scope', '');
-        // params.append('client_id', '');
-        // params.append('client_secret', '');
+        params.append('password', SSO_DEFAULT_PASSWORD);
 
         const loginUrl = `https://${LANGFLOW_DOMAIN}${LOGIN_PATH}`;
         const loginResp = await fetch(loginUrl, {
@@ -80,7 +79,8 @@
             window.location.href = `https://${LANGFLOW_DOMAIN}/`;
           }, 1000);
         } else {
-          statusDiv.textContent = "Auto-login failed. Please check SSO and try again.";
+          const data = await loginResp.json().catch(() => ({}));
+          statusDiv.textContent = "Auto-login failed. " + (data.detail ? data.detail : "Please check SSO and try again.");
           statusDiv.style.color = "#dc3545";
         }
       } catch (err) {
