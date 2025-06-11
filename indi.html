@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Langflow SSO Autologin</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; background: #f8fafc; color: #222; }
+    .container { background: #fff; padding: 36px 24px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,.08); text-align: center; max-width: 400px; }
+    h2 { color: #007bff; margin-bottom: 18px; }
+    input, button { margin: 10px 0; padding: 10px; width: 90%; border-radius: 5px; border: 1px solid #ccc; }
+    button { background: #28a745; color: #fff; font-weight: bold; cursor: pointer; border: none; }
+    #status { margin: 18px 0 0 0; color: #007bff; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Langflow SSO Login</h2>
+    <form id="ssoForm">
+      <input id="email" type="email" placeholder="User Email" required autocomplete="email" />
+      <input id="token" type="text" placeholder="SSO Token" required />
+      <button type="submit">Log in to Langflow</button>
+    </form>
+    <div id="status"></div>
+    <p style="font-size:0.92em;color:#888;">You will be redirected to Langflow automatically after successful SSO login.</p>
+  </div>
+  <script>
+    const form = document.getElementById('ssoForm');
+    const statusDiv = document.getElementById('status');
+    // --- Update this to your deployed Langflow domain ---
+    const LANGFLOW_DOMAIN = "geniaiapps.exlservice.com";
+    const SSO_PATH = "/api/v1/sso_login";
+    const LOGIN_PATH = "/api/v1/login";
+    const WHOAMI_PATH = "/api/v1/users/whoami";
+    const SSO_DEFAULT_PASSWORD = "sso_user_secret"; // Must match backend!
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      statusDiv.style.color = '#007bff';
+      statusDiv.textContent = "Initiating SSO login...";
+
+      const email = document.getElementById('email').value.trim();
+      const token = document.getElementById('token').value.trim();
+      if (!email || !token) {
+        statusDiv.textContent = "Please provide both email and token.";
+        statusDiv.style.color = '#dc3545';
+        return;
+      }
+      try {
+        // 1. Call /sso_login to create user and set cookies (if user doesn't exist)
+        const ssoUrl = `https://${LANGFLOW_DOMAIN}${SSO_PATH}?email=${encodeURIComponent(email)}&token=${encodeURIComponent(token)}`;
+        const ssoResp = await fetch(ssoUrl, {
+          method: "GET",
+          credentials: "include"
+        });
+        // Accept 307, 302, 200 as "ok"
+        if (!(ssoResp.ok || ssoResp.status === 307 || ssoResp.status === 302)) {
+          statusDiv.textContent = "SSO setup failed. Try again.";
+          statusDiv.style.color = '#dc3545';
+          return;
+        }
+        statusDiv.textContent = "SSO setup done. Logging in...";
+
+        // 2. POST to /login with OAuth2 form fields
+        const params = new URLSearchParams();
+        params.append('username', email);
+        params.append('password', SSO_DEFAULT_PASSWORD);
+
+        const loginUrl = `https://${LANGFLOW_DOMAIN}${LOGIN_PATH}`;
+        const loginResp = await fetch(loginUrl, {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: params
+        });
+
+        if (loginResp.ok) {
+          // 3. Call whoami using access_token as Authorization: Bearer
+          const loginData = await loginResp.json();
+          const accessToken = loginData.access_token;
+          if (!accessToken) {
+            statusDiv.textContent = "Auto-login failed: No token received.";
+            statusDiv.style.color = "#dc3545";
+            return;
+          }
+          statusDiv.textContent = "Verifying session...";
+
+          const whoamiUrl = `https://${LANGFLOW_DOMAIN}${WHOAMI_PATH}`;
+          const whoamiResp = await fetch(whoamiUrl, {
+            method: "GET",
+            credentials: "include",
+            headers: { "Authorization": "Bearer " + accessToken }
+          });
+          if (whoamiResp.ok) {
+            statusDiv.textContent = "Login successful! Redirecting...";
+            setTimeout(() => {
+              window.location.href = `https://${LANGFLOW_DOMAIN}/`;
+            }, 1000);
+          } else {
+            const wdata = await whoamiResp.json().catch(() => ({}));
+            statusDiv.textContent = "Auto-login failed after login. " + (wdata.detail ? wdata.detail : "Session invalid.");
+            statusDiv.style.color = "#dc3545";
+          }
+        } else {
+          const data = await loginResp.json().catch(() => ({}));
+          statusDiv.textContent = "Auto-login failed. " + (data.detail ? data.detail : "Please check SSO and try again.");
+          statusDiv.style.color = "#dc3545";
+        }
+      } catch (err) {
+        statusDiv.textContent = "Server error: " + err;
+        statusDiv.style.color = '#dc3545';
+      }
+    });
+  </script>
+</body>
+</html>
