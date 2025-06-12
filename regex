@@ -1,0 +1,28 @@
+Search Patterns to Use (copy-paste these one by one):
+For Navigation Props:
+to\s*=\s*["'][/]
+
+to\s*=\s*{\s*["'][/]
+
+to\s*=\s*{\s*\\?${1,2}BASENAME`
+
+For Programmatic Navigation:
+navigate\s*\(\s*["'][/]
+
+<Navigate\s+to\s*=\s*["'][/]
+
+<Navigate\s+to\s*=\s*{\s*["'][/]
+
+window\.location\.(href|assign|replace)\s*=\s*["'][/]
+
+For Backticks (template strings):
+to\s*=\s*{\s*/`
+
+navigate\s*\(\s*/`
+
+window\.location\.(href|assign|replace)\s*=\s*/`
+
+For Replace Function (rare but possible):
+replace\s*\(\s*["'][/]
+
+replace\s*\(\s*/`
