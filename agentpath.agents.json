@@ -1,0 +1,266 @@
+[{
+  "_id": {
+    "$oid": "68624d76d10d19498503fce6"
+  },
+  "name": "FinanceDoc AI",
+  "logo": "/logo.svg",
+  "category": "Finance",
+  "description": "Summarize, review, and analyze financial documents instantly.",
+  "performance": 98,
+  "subscribers": 145,
+  "activeUsers": 23,
+  "avgResponseTime": 322,
+  "uptime": 99.99,
+  "errorRate": 0.4,
+  "rating": 4.9,
+  "reviews": [
+    {
+      "user": "Amit",
+      "text": "Changed our finance workflow!",
+      "rating": 5
+    },
+    {
+      "user": "Priya",
+      "text": "Accurate and reliable.",
+      "rating": 5
+    }
+  ],
+  "trending": true,
+  "createdAt": "2024-02-15",
+  "lastActive": "2024-06-27",
+  "backendUrl": "https://api.agentpath.com/agents/finance-doc-ai/summarize",
+  "embedUrl": "https://demo.agentpath.com/finance-doc-ai/try",
+  "capabilities": [
+    "Summarization",
+    "Extraction"
+  ],
+  "publisher": "dev_team@exl.com",
+  "status": "active",
+  "id": "a1"
+},
+{
+  "_id": {
+    "$oid": "68624d76d10d19498503fce7"
+  },
+  "name": "HR Buddy",
+  "logo": "/logo.svg",
+  "category": "HR",
+  "description": "Automate resume screening and answer employee HR questions.",
+  "performance": 93,
+  "subscribers": 112,
+  "activeUsers": 18,
+  "avgResponseTime": 504,
+  "uptime": 99.8,
+  "errorRate": 1.2,
+  "rating": 4.7,
+  "reviews": [
+    {
+      "user": "Megha",
+      "text": "Saves HR hours every week.",
+      "rating": 5
+    },
+    {
+      "user": "John",
+      "text": "Good for large companies.",
+      "rating": 4
+    }
+  ],
+  "trending": false,
+  "createdAt": "2024-03-05",
+  "lastActive": "2024-06-27",
+  "backendUrl": "https://api.agentpath.com/agents/hr-buddy/chat",
+  "embedUrl": "https://demo.agentpath.com/hr-buddy/try",
+  "capabilities": [
+    "Chatbot",
+    "Classification"
+  ],
+  "publisher": "prashant@exl.com",
+  "status": "active",
+  "id": "a2"
+},
+{
+  "_id": {
+    "$oid": "68624d76d10d19498503fce8"
+  },
+  "name": "LegalQ",
+  "logo": "/logo.svg",
+  "category": "Legal",
+  "description": "AI for contract review and compliance questions.",
+  "performance": 91,
+  "subscribers": 87,
+  "activeUsers": 14,
+  "avgResponseTime": 410,
+  "uptime": 99.5,
+  "errorRate": 2.2,
+  "rating": 4.6,
+  "reviews": [
+    {
+      "user": "Divya",
+      "text": "Very helpful for contract teams.",
+      "rating": 5
+    }
+  ],
+  "trending": false,
+  "createdAt": "2024-03-28",
+  "lastActive": "2024-06-26",
+  "backendUrl": "https://api.agentpath.com/agents/legalq/qa",
+  "embedUrl": "https://demo.agentpath.com/legalq/try",
+  "capabilities": [
+    "Q&A",
+    "Classification"
+  ],
+  "publisher": "legaltech@exl.com",
+  "status": "active",
+  "id": "a3"
+},
+{
+  "_id": {
+    "$oid": "68624d76d10d19498503fce9"
+  },
+  "name": "ResearchGen",
+  "logo": "/logo.svg",
+  "category": "Research",
+  "description": "Summarizes latest research, finds references instantly.",
+  "performance": 97,
+  "subscribers": 203,
+  "activeUsers": 45,
+  "avgResponseTime": 189,
+  "uptime": 99.95,
+  "errorRate": 0.3,
+  "rating": 4.9,
+  "reviews": [
+    {
+      "user": "Raj",
+      "text": "Best for our lab team.",
+      "rating": 5
+    }
+  ],
+  "trending": true,
+  "createdAt": "2024-01-18",
+  "lastActive": "2024-06-27",
+  "backendUrl": "https://api.agentpath.com/agents/researchgen/summarize",
+  "embedUrl": "",
+  "capabilities": [
+    "Summarization"
+  ],
+  "publisher": "lab_analytics@exl.com",
+  "status": "active",
+  "id": "a4"
+},
+{
+  "_id": {
+    "$oid": "68627cef9b958bda22ce329d"
+  },
+  "id": "e0cc12c8-bb80-4454-8f79-ddda0153efda",
+  "name": "test",
+  "category": "Finance",
+  "capabilities": [
+    "Summarization",
+    "Chatbot"
+  ],
+  "description": "wefewf",
+  "logo": "/logo.svg",
+  "performance": 100,
+  "subscribers": 0,
+  "activeUsers": 0,
+  "avgResponseTime": 0,
+  "uptime": 99.99,
+  "errorRate": 0,
+  "rating": 5,
+  "reviews": [],
+  "trending": false,
+  "createdAt": "",
+  "lastActive": "",
+  "backendUrl": "fewf",
+  "embedUrl": "fewf",
+  "publisher": "yashugupta.gupta11@gmail.com",
+  "status": "active"
+},
+{
+  "_id": {
+    "$oid": "68627f5f9b958bda22ce329e"
+  },
+  "id": "348cef75-802d-4119-a608-52380edd85d0",
+  "name": "hello",
+  "category": "Finance",
+  "capabilities": [
+    "Chatbot"
+  ],
+  "description": "efef",
+  "logo": "/logo.svg",
+  "performance": 100,
+  "subscribers": 0,
+  "activeUsers": 0,
+  "avgResponseTime": 0,
+  "uptime": 99.99,
+  "errorRate": 0,
+  "rating": 5,
+  "reviews": [],
+  "trending": false,
+  "createdAt": "",
+  "lastActive": "",
+  "backendUrl": "ef",
+  "embedUrl": "ef",
+  "publisher": "yashugupta.gupta11@gmail.com",
+  "status": "active"
+},
+{
+  "_id": {
+    "$oid": "686356d8524e128df5bbd95d"
+  },
+  "id": "4ca5aec5-520f-4269-a77b-fb3376abcd3e",
+  "name": "PMO Agent",
+  "category": "Project Management",
+  "capabilities": [
+    "BRD Analysis",
+    "Milestone Planning",
+    "Resource Mapping",
+    "Timeline & Buffer Calculation"
+  ],
+  "description": "Upload a BRD and start date, get milestones/resources/timeline instantly!",
+  "logo": "/logo.svg",
+  "performance": 100,
+  "subscribers": 0,
+  "activeUsers": 0,
+  "avgResponseTime": 0,
+  "uptime": 99.99,
+  "errorRate": 0,
+  "rating": 5,
+  "reviews": [],
+  "trending": false,
+  "createdAt": "",
+  "lastActive": "",
+  "backendUrl": "http://localhost:8000/agents/pmo/generate-pmo-plan",
+  "embedUrl": "",
+  "publisher": "admin@demo.com",
+  "status": "active"
+},
+{
+  "_id": {
+    "$oid": "686378a935532a05278d1c9c"
+  },
+  "id": "e5247fb9-d45b-4f05-9566-18d8a03abfb7",
+  "name": "ashar",
+  "category": "Finance",
+  "capabilities": [
+    "Chatbot",
+    "Summarization"
+  ],
+  "description": "frwfrwf",
+  "logo": "/logo.svg",
+  "performance": 100,
+  "subscribers": 0,
+  "activeUsers": 0,
+  "avgResponseTime": 0,
+  "uptime": 99.99,
+  "errorRate": 0,
+  "rating": 5,
+  "reviews": [],
+  "trending": false,
+  "createdAt": "",
+  "lastActive": "",
+  "backendUrl": "ewrfew",
+  "embedUrl": "ewrfdewr",
+  "publisher": "sahi1@gmail.com",
+  "status": "active"
+}]
